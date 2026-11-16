@@ -67,8 +67,7 @@ def embed(ids, W_E):
 
     Hint: NumPy can index an array with a list of row numbers.
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    return W_E[ids]
 
 
 def add_positions(X, W_pos):
@@ -90,8 +89,8 @@ def add_positions(X, W_pos):
         add_positions(X, W_pos)   ->   [[1, 2],
                                         [3, 4]]
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    n = X.shape[0]
+    return X + W_pos[:n]
 
 # ============================================================================
 # 3. The MLP
@@ -118,8 +117,8 @@ def mlp(x, W_up, b_up, W_down, b_down):
 
     Use the provided gelu() from lab_utils.
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    hidden = gelu(x @ W_up + b_up)
+    return hidden @ W_down + b_down
 
 # ============================================================================
 # 4. A transformer block
@@ -153,8 +152,10 @@ def transformer_block(x, block):
 
     Sanity check: if attention and the MLP both returned all zeros, the output would equal x.
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    x = x + attention_block(layer_norm(x, block["ln1_g"], block["ln1_b"]), block)
+    x = x + mlp(layer_norm(x, block["ln2_g"], block["ln2_b"]),
+                block["W_up"], block["b_up"], block["W_down"], block["b_down"])
+    return x
 
 # ============================================================================
 # 5. Unembedding
@@ -179,8 +180,7 @@ def unembed(x, W_E):
                         [1, 1, 1]])
         unembed(x, W_E)   ->   [[1, 2, 6]]
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    return x @ W_E.T
 
 # ============================================================================
 # 6. The full forward pass
@@ -209,8 +209,12 @@ def forward(ids, params):
     Example:
         forward(enc.encode("The old cat"), params).shape   ->   (3, 50257)
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    x = embed(ids, params["W_E"])
+    x = add_positions(x, params["W_pos"])
+    for block in params["blocks"]:
+        x = transformer_block(x, block)
+    x = layer_norm(x, params["lnf_g"], params["lnf_b"])
+    return unembed(x, params["W_E"])
 
 # ============================================================================
 # 7. Softmax with temperature:   p_i = exp(z_i / T) / sum_j exp(z_j / T)
@@ -237,8 +241,10 @@ def softmax(z, T=1.0):
     Hints: convert first with np.asarray(z, dtype=np.float64), divide by T, and subtract
            z.max(axis=-1, keepdims=True) before np.exp so big logits don't overflow.
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    z = np.asarray(z, dtype=np.float64) / T
+    z = z - z.max(axis=-1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=-1, keepdims=True)
 
 # ============================================================================
 # 8. Picking the next token
@@ -264,8 +270,10 @@ def sample(probs, greedy=False, rng=None):
     Hints: np.argmax; rng.choice(len(probs), p=probs). Return a plain int, e.g. int(...).
     """
     rng = rng or np.random.default_rng()
-    # YOUR CODE HERE
-    raise NotImplementedError
+    if greedy:
+        return int(np.argmax(probs))
+    probs = probs / probs.sum()
+    return int(rng.choice(len(probs), p=probs))
 
 
 def generate(prompt, max_new_tokens=20, T=1.0, greedy=False):
@@ -294,8 +302,15 @@ def generate(prompt, max_new_tokens=20, T=1.0, greedy=False):
         generate("The old cat sat on the", max_new_tokens=3, greedy=True)
             ->   "The old cat sat on the" + 3 more tokens   (the exact words depend on the model)
     """
-    # YOUR CODE HERE
-    raise NotImplementedError
+    ids = enc.encode(prompt)
+    for _ in range(max_new_tokens):
+        logits = forward(ids[-params["W_pos"].shape[0]:], params)
+        probs = softmax(logits[-1], T)
+        next_id = sample(probs, greedy=greedy)
+        if next_id == EOS:
+            break
+        ids.append(next_id)
+    return enc.decode(ids)
 
 
 if __name__ == "__main__":
